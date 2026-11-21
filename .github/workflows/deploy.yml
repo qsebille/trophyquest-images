@@ -95,6 +95,7 @@ jobs:
   deploy:
     needs: release
     runs-on: ubuntu-latest
+    environment: prod
     permissions:
       contents: read
       id-token: write
@@ -134,17 +135,8 @@ jobs:
             exit 1
           fi
 
-          case "$ARCHITECTURE" in
-            x86_64) PLATFORM_ARCH=x86_64 ;;
-            arm64) PLATFORM_ARCH=aarch64 ;;
-            *)
-              echo "::error::Unsupported architecture: $ARCHITECTURE"
-              exit 1
-              ;;
-          esac
-
           echo "python_version=${RUNTIME#python}" >> "$GITHUB_OUTPUT"
-          echo "platform_arch=$PLATFORM_ARCH" >> "$GITHUB_OUTPUT"
+          echo "architecture=$ARCHITECTURE" >> "$GITHUB_OUTPUT"
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -157,28 +149,8 @@ jobs:
         shell: bash
         env:
           PYTHON_VERSION: ${{ steps.lambda.outputs.python_version }}
-          PLATFORM_ARCH: ${{ steps.lambda.outputs.platform_arch }}
-        run: |
-          set -euo pipefail
-
-          mkdir -p packaged-lambda artifacts
-
-          python -m pip install --upgrade pip
-          python -m pip install \
-            --requirement requirements.txt \
-            --target packaged-lambda/ \
-            --platform "manylinux_2_28_$PLATFORM_ARCH" \
-            --platform "manylinux2014_$PLATFORM_ARCH" \
-            --implementation cp \
-            --python-version "$PYTHON_VERSION" \
-            --only-binary=:all: \
-            --no-compile
-
-          cp -R src/. packaged-lambda/
-
-          cd packaged-lambda
-          zip -qr ../artifacts/image-uploader.zip . \
-            -x '*/__pycache__/*' '*.pyc'
+          ARCHITECTURE: ${{ steps.lambda.outputs.architecture }}
+        run: bash scripts/package-lambda.sh "$PYTHON_VERSION" "$ARCHITECTURE"
 
       - name: Update Lambda code
         shell: bash
@@ -187,7 +159,7 @@ jobs:
 
           aws lambda update-function-code \
             --function-name "$FUNCTION_NAME" \
-            --zip-file fileb://artifacts/image-uploader.zip \
+            --zip-file fileb://out/image-uploader.zip \
             --output json > /dev/null
 
           aws lambda wait function-updated \
