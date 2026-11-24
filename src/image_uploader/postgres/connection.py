@@ -1,5 +1,6 @@
 import json
 import os
+from contextlib import closing
 from functools import lru_cache
 from time import monotonic
 
@@ -9,7 +10,7 @@ from pg8000.dbapi import Connection, connect
 
 @lru_cache(maxsize=1)
 def _read_postgres_secret(secret_arn: str, refresh_window: int) -> dict:
-    with boto3.client("secretsmanager") as client:
+    with closing(boto3.client("secretsmanager")) as client:
         response = client.get_secret_value(SecretId=secret_arn)
     return json.loads(response["SecretString"])
 

@@ -1,5 +1,5 @@
 import json
-from unittest.mock import MagicMock, Mock
+from unittest.mock import Mock
 
 from image_uploader.postgres import connection
 
@@ -13,8 +13,8 @@ def test_postgres_secret_is_reused_and_refreshed(monkeypatch):
         "username": "image_uploader",
         "password": "test-password",
     }
-    client = MagicMock()
-    get_secret_value = client.return_value.__enter__.return_value.get_secret_value
+    client = Mock()
+    get_secret_value = client.return_value.get_secret_value
     get_secret_value.side_effect = [
         {"SecretString": json.dumps(settings)},
         {"SecretString": json.dumps(settings | {"password": "rotated-password"})},
@@ -32,6 +32,7 @@ def test_postgres_secret_is_reused_and_refreshed(monkeypatch):
     client.assert_called_with("secretsmanager")
     get_secret_value.assert_called_with(SecretId=secret_arn)
     assert get_secret_value.call_count == 2
+    assert client.return_value.close.call_count == 2
     assert [call.kwargs["password"] for call in connect.call_args_list] == [
         "test-password", "test-password", "rotated-password",
     ]
